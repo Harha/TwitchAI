@@ -1,11 +1,11 @@
 package to.us.harha.twitchai.util;
 
 import static to.us.harha.twitchai.util.GenUtils.*;
+import static to.us.harha.twitchai.util.LogUtils.logMsg;
+import static to.us.harha.twitchai.util.LogUtils.logErr;
 
 import java.io.BufferedReader;
-import java.io.BufferedWriter;
 import java.io.File;
-import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
@@ -14,25 +14,6 @@ import java.util.ArrayList;
 
 public class FileUtils
 {
-
-    public static void writeToTextFile(String directory, String fileName, String text)
-    {
-        if (!directoryExists(directory))
-        {
-            return;
-        }
-
-        try
-        {
-            PrintWriter out = new PrintWriter(new FileWriter(directory + fileName, true));
-            out.println(text);
-            out.close();
-        } catch (IOException e)
-        {
-            e.printStackTrace();
-            exit(1);
-        }
-    }
 
     public static ArrayList<String> readTextFile(String fileName)
     {
@@ -62,48 +43,54 @@ public class FileUtils
         return result;
     }
 
-    public static boolean removeLineFromTextFile(String fileName, String line)
+    public static void writeToTextFile(String directory, String fileName, String text)
     {
-        File inputFile = new File(fileName);
-        File tempFile = new File(fileName + ".temp");
-        BufferedReader reader;
-        BufferedWriter writer;
-        boolean successful = false;
-
-        File f = new File(fileName);
-        if (!f.exists())
+        if (!directoryExists(directory))
         {
-            return successful;
+            logErr("Cannot write to file " + fileName + " in directory " + directory + "! The directory doesn't exist.");
+            return;
         }
 
         try
         {
-            reader = new BufferedReader(new FileReader(inputFile));
-            writer = new BufferedWriter(new FileWriter(tempFile));
-
-            String currentLine;
-
-            while ((currentLine = reader.readLine()) != null)
-            {
-                // Trim newline when comparing with lineToRemove
-                String trimmedLine = currentLine.trim();
-                if (trimmedLine.equals(line))
-                    continue;
-                writer.write(currentLine + System.getProperty("line.separator"));
-            }
-            writer.close();
-            reader.close();
+            PrintWriter out = new PrintWriter(new FileWriter(directory + fileName, true));
+            out.println(text);
+            out.close();
         } catch (IOException e)
         {
             e.printStackTrace();
             exit(1);
-        } finally
+        }
+    }
+
+    public static void removeFromTextFile(String directory, String fileName, String line)
+    {
+        ArrayList<String> lines = readTextFile(directory + fileName);
+
+        if (lines.isEmpty())
         {
-            inputFile.delete();
-            successful = tempFile.renameTo(inputFile);
+            logErr("File is empty or does not exist!");
+            return;
         }
 
-        return successful;
+        ArrayList<String> lines_to_be_removed = new ArrayList<String>();
+        for (String s : lines)
+        {
+            if (s.equals(line))
+            {
+                logMsg("Removing line " + s + " from " + fileName + "!");
+                lines_to_be_removed.add(s);
+            }
+        }
+
+        lines.removeAll(lines_to_be_removed);
+        File file = new File(directory + fileName);
+        file.delete();
+
+        for (String s : lines)
+        {
+            writeToTextFile(directory, fileName, s);
+        }
     }
 
     public static boolean directoryExists(String directory)
@@ -123,10 +110,10 @@ public class FileUtils
                 exit(1);
             }
 
-            // Failed to create directory, don't continue, return immediately!
+            // Failed to create directory!
             if (!result)
             {
-                System.err.println("Failed to create directory! " + directory);
+                logErr("Failed to create directory! " + directory);
             }
         }
 

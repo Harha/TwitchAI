@@ -1,13 +1,13 @@
 package to.us.harha.twitchai.bot;
 
-
 public class ChanUser
 {
 
-    private String m_name;
-    private String m_prefix;
-    private String m_channel;
-    private int    m_cmd_timer;
+    private final String m_name;
+    private String       m_prefix;
+    private String       m_channel;
+    private int          m_cmd_timer;
+    private boolean      m_urlpermit;
 
     public ChanUser(String name, String channel)
     {
@@ -15,6 +15,7 @@ public class ChanUser
         m_prefix = "";
         m_channel = channel;
         m_cmd_timer = 0;
+        m_urlpermit = false;
     }
 
     @Override
@@ -43,14 +44,29 @@ public class ChanUser
         return m_cmd_timer;
     }
 
+    public boolean getUrlPermit()
+    {
+        return m_urlpermit;
+    }
+
     public void setPrefix(String prefix)
     {
         m_prefix = prefix;
     }
 
+    public void setChannel(String channel)
+    {
+        m_channel = channel;
+    }
+
     public void setCmdTimer(int time)
     {
         m_cmd_timer = time;
+    }
+
+    public void setUrlPermit(boolean urlpermit)
+    {
+        m_urlpermit = urlpermit;
     }
 
 }

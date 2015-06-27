@@ -1,6 +1,7 @@
 package to.us.harha.twitchai;
 
 import static to.us.harha.twitchai.util.Globals.*;
+import static to.us.harha.twitchai.util.GenUtils.exit;
 import to.us.harha.twitchai.bot.ChanUser;
 import to.us.harha.twitchai.bot.TwitchAI;
 import to.us.harha.twitchai.util.ConfUtils;
@@ -17,11 +18,21 @@ public class Main
         TwitchAI twitchai = new TwitchAI();
         twitchai.init_twitch();
 
-        while (true)
+        Runtime.getRuntime().addShutdownHook(new Thread(new Runnable()
+        {
+
+            public void run()
+            {
+                twitchai.destruct();
+                exit(0);
+            }
+        }, "Exit-hook"));
+
+        while (twitchai.isConnected())
         {
             g_date.setTime(System.currentTimeMillis());
 
-            for (ChanUser u : twitchai.getAllChanUsers())
+            for (ChanUser u : twitchai.getAllUsers())
             {
                 if (u.getCmdTimer() > 0)
                 {
@@ -38,5 +49,4 @@ public class Main
             }
         }
     }
-
 }

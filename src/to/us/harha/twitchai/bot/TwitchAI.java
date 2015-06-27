@@ -33,6 +33,15 @@ public class TwitchAI extends PircBot
         setVerbose(false);
     }
 
+    public void destruct()
+    {
+        logMsg("TwitchAI Shutting down! Doing a cleanup...");
+        logMsg("Clearing all m_chanusers...");
+        m_chanusers.clear();
+        logMsg("Clearing all m_moderators...");
+        m_moderators.clear();
+    }
+
     public void init_twitch()
     {
         logMsg("Loading all registered moderators...");
@@ -40,7 +49,9 @@ public class TwitchAI extends PircBot
         for (String m : loadedModerators)
         {
             String[] m_split = m.split(" ");
-            m_moderators.add(new TwitchUser(m_split[0], Integer.parseInt(m_split[1])));
+            TwitchUser newmod = new TwitchUser(m_split[0], Integer.parseInt(m_split[1]));
+            logMsg("Loading a TwitchAI moderator: " + newmod);
+            m_moderators.add(newmod);
         }
 
         logMsg("Attempting to connect to irc.twitch.tv...");
@@ -94,7 +105,7 @@ public class TwitchAI extends PircBot
 
         String[] line_array = line.split(" ");
 
-        if (line_array[0].equals("MODE"))
+        if (line_array[0].equals("MODE") && line_array.length >= 4)
         {
             onMode(line_array[1], line_array[3], line_array[3], "", line_array[2]);
         }
@@ -104,17 +115,26 @@ public class TwitchAI extends PircBot
     public void onJoin(String channel, String sender, String login, String hostname)
     {
         super.onJoin(channel, sender, login, hostname);
+
+        if (getUserFromChan(channel, sender) == null)
+        {
+            ChanUser chanuser = new ChanUser(sender, channel);
+            m_chanusers.add(chanuser);
+            logMsg("Adding new chanuser..." + chanuser + " to m_chanusers for channel " + channel);
+        }
     }
 
     @Override
     public void onPart(String channel, String sender, String login, String hostname)
     {
+        super.onPart(channel, sender, login, hostname);
+
         ArrayList<ChanUser> users_to_be_removed = new ArrayList<ChanUser>();
         for (ChanUser u : m_chanusers)
         {
             if (u.getName().equals(sender) && u.getChannel().equals(channel))
             {
-                logMsg("Removing " + sender + " from m_chanusers...");
+                logMsg("Removing " + u + " from m_chanusers...");
                 users_to_be_removed.add(u);
             }
         }
@@ -122,9 +142,26 @@ public class TwitchAI extends PircBot
     }
 
     @Override
-    public void onQuit(String sourceNick, String sourceLogin, String sourceHostname, String reason)
+    public void onMode(String channel, String sourceNick, String sourceLogin, String sourceHostname, String mode)
     {
-        super.onQuit(sourceNick, sourceLogin, sourceHostname, reason);
+        super.onMode(channel, sourceNick, sourceLogin, sourceHostname, mode);
+
+        if (getUserFromChan(channel, sourceNick) == null)
+        {
+            logErr("Error onMode! Cannot find requested user from m_chanusers! (" + sourceNick + ") in (" + channel + ")");
+            return;
+        }
+
+        if (mode.equals("+o"))
+        {
+            logMsg("Adding +o MODE for user " + sourceNick + " in channel " + channel);
+            getUserFromChan(channel, sourceNick).setPrefix("@");
+        }
+        else if (mode.equals("-o"))
+        {
+            logMsg("Adding -o MODE for user " + sourceNick + " in channel " + channel);
+            getUserFromChan(channel, sourceNick).setPrefix("");
+        }
     }
 
     @Override
@@ -134,11 +171,11 @@ public class TwitchAI extends PircBot
 
         for (User u : users)
         {
-            if (getChanUserFromChan(channel, u.getNick()) == null)
+            if (getUserFromChan(channel, u.getNick()) == null)
             {
                 ChanUser chanuser = new ChanUser(u.getNick(), channel);
                 m_chanusers.add(chanuser);
-                logMsg("Adding new chanuser..." + chanuser + " to m_chanusers");
+                logMsg("Adding new chanuser..." + chanuser + " to m_chanusers for channel " + channel);
             }
         }
     }
@@ -149,19 +186,19 @@ public class TwitchAI extends PircBot
         logMsg("data/channels/" + channel, "/onMessage", "User: " + sender + " Hostname: " + hostname + " Message: " + message);
 
         /*
-        if (message.contains("http://") || message.contains("www.") || message.contains(".com") || message.contains(".org"))
-        {
-            sendMessage(channel, "You need a permission to post links! " + sender + " Was put on a timeout.");
-            sendMessage(channel, "/timeout " + login);
-        }
-        */
-
-        // Handle all chat commands
+         * Handle all chat commands
+         */
         if (message.startsWith("!"))
         {
-            ChanUser cmduser = getChanUserFromChan(channel, sender);
+            ChanUser cmduser = getUserFromChan(channel, sender);
 
-            if (cmduser != null && message.length() > 3)
+            if (cmduser == null)
+            {
+                logErr("Error! Cannot find cmduser " + sender + " from channel " + channel + "! Assigning a null user object to cmduser.");
+                cmduser = g_nulluser;
+            }
+
+            if (message.length() > 3)
             {
                 if (cmduser.getCmdTimer() > 0)
                 {
@@ -176,21 +213,34 @@ public class TwitchAI extends PircBot
 
             switch (msg_command)
             {
+
+            /*
+             * Normal channel user commands below
+             */
                 case "!help":
                     sendMessage(channel, "List of available commands to you: " + g_commands_user);
 
-                    if (isMod(sender) != null)
+                    if (cmduser.getPrefix().equals("@"))
                     {
-                        sendMessage(channel, "List of extra commands available to you: " + g_commands_mod);
+                        sendMessage(channel, "List of available operator commands to you: " + g_commands_op);
+                    }
+
+                    if (getMod(sender) != null)
+                    {
+                        sendMessage(channel, "List of TwitchAI moderator commands available to you: " + g_commands_mod);
                     }
                     break;
 
                 case "!info":
-                    sendMessage(channel, "Core: " + g_bot_version + " Library: " + getVersion());
+                    sendMessage(channel, "Language: Java Core: " + g_bot_version + " Library: " + getVersion());
+                    break;
+
+                case "!date":
+                    sendMessage(channel, g_dateformat.format(g_date));
                     break;
 
                 case "!time":
-                    sendMessage(channel, g_dateformat.format(g_date));
+                    sendMessage(channel, g_timeformat.format(g_date));
                     break;
 
                 case "!users":
@@ -252,21 +302,66 @@ public class TwitchAI extends PircBot
                     if (num1 == num2 && num2 == num3)
                     {
                         sendMessage(channel, "And we have a new winner! " + sender + " Just got their name on the slots legends list!");
-                        FileUtils.writeToTextFile("data/", "slots.txt", g_dateformat.format(g_date) + " " + sender + ": " + slots);
+                        FileUtils.writeToTextFile("data/", "slots.txt", g_datetimeformat.format(g_date) + " " + sender + ": " + slots);
                     }
                     break;
 
+                /*
+                 * Normal channel operator commands below
+                 */
                 case "!permit":
-                    if (!getChanOps(channel).contains(getUserFromChan(channel, sender)))
+                    if (!getUserFromChan(channel, sender).getPrefix().equals("@"))
                     {
-                        break;
+                        return;
                     }
 
-                    sendMessage(channel, "This works!");
+                    if (msg_array.length <= 1)
+                    {
+                        sendMessage(channel, "Wrong syntax! Usage: !permit username");
+                        return;
+                    }
+
+                    user = msg_array[1];
+                    ChanUser permituser = getUserFromChan(channel, user);
+                    if (permituser == null)
+                    {
+                        logErr("Error! User not found, cannot give permission for posting url's to selected user!");
+                        return;
+                    }
+
+                    sendMessage(channel, sender + " Gave " + user + " a permission to post links!");
+                    permituser.setUrlPermit(true);
                     break;
 
+                case "!unpermit":
+                    if (!getUserFromChan(channel, sender).getPrefix().equals("@"))
+                    {
+                        return;
+                    }
+
+                    if (msg_array.length <= 1)
+                    {
+                        sendMessage(channel, "Wrong syntax! Usage: !unpermit username");
+                        return;
+                    }
+
+                    user = msg_array[1];
+                    ChanUser unpermituser = getUserFromChan(channel, user);
+                    if (unpermituser == null)
+                    {
+                        logErr("Error! User not found, cannot remove permission for posting url's from selected user!");
+                        return;
+                    }
+
+                    sendMessage(channel, sender + " Removed " + user + "'s permission to post links!");
+                    unpermituser.setUrlPermit(false);
+                    break;
+
+                /*
+                 * Normal TwitchAI moderator commands below
+                 */
                 case "!addmod":
-                    if (isMod(sender) == null)
+                    if (getMod(sender) == null)
                     {
                         break;
                     }
@@ -279,7 +374,7 @@ public class TwitchAI extends PircBot
 
                     user = msg_array[1].toLowerCase();
 
-                    if (isMod(user) == null)
+                    if (getMod(user) == null)
                     {
                         logMsg(sender + " Added a new moderator: " + user + " Privileges: 1");
                         sendMessage(channel, sender + " Added a new moderator: " + user + " Privileges: 1");
@@ -294,7 +389,7 @@ public class TwitchAI extends PircBot
                     break;
 
                 case "!delmod":
-                    if (isMod(sender) == null)
+                    if (getMod(sender) == null)
                     {
                         break;
                     }
@@ -307,12 +402,12 @@ public class TwitchAI extends PircBot
 
                     user = msg_array[1].toLowerCase();
 
-                    if (isMod(user) != null)
+                    if (getMod(user) != null)
                     {
                         logMsg(sender + " Removed a moderator: " + user + " Privileges: 1");
                         sendMessage(channel, sender + " Removed a moderator: " + user + " Privileges: 1");
-                        // FileUtils.removeLineFromTextFile("moderators.txt", user + " " + m_moderators.get(user).getPrivileges());
-                        m_moderators.remove(isMod(user));
+                        FileUtils.removeFromTextFile("data/", "moderators.txt", user + " " + getMod(user).getPrivileges());
+                        m_moderators.remove(getMod(user));
                     }
                     else
                     {
@@ -330,44 +425,17 @@ public class TwitchAI extends PircBot
                     break;
 
                 case "!addchan":
-                    if (isMod(sender) == null)
-                    {
-                        break;
-                    }
-
-                    if (msg_array.length <= 1)
-                    {
-                        sendMessage(channel, "Wrong syntax! Usage: !addchan channel");
-                        break;
-                    }
-
-                    if (!msg_array[1].startsWith("#"))
-                    {
-                        msg_array[1] = "#" + msg_array[1];
-                    }
-
-                    ArrayList<String> channels = FileUtils.readTextFile("data/channels.txt");
-                    if (channels.size() <= 0 || !channels.contains(msg_array[1]))
-                    {
-                        logMsg("Registering a new channel: " + msg_array[1]);
-                        FileUtils.writeToTextFile("data/", "channels.txt", msg_array[1]);
-                        joinChannel(msg_array[1]);
-                    }
-                    else
-                    {
-                        logErr("Failed to register a new channel: " + msg_array[1]);
-                        sendMessage(channel, "That channel is already registered!");
-                    }
+                    cmdAddChan(channel, sender, msg_array);
+                    break;
+                case "!delchan":
+                    cmdDelChan(channel, sender, msg_array);
                     break;
             }
 
-            if (cmduser == null)
+            if (!cmduser.getName().equals("null"))
             {
-                cmduser = new ChanUser(sender, channel);
-                m_chanusers.add(cmduser);
+                cmduser.setCmdTimer(5);
             }
-
-            cmduser.setCmdTimer(5);
         }
     }
 
@@ -375,61 +443,11 @@ public class TwitchAI extends PircBot
     public void onPrivateMessage(String sender, String login, String hostname, String message)
     {
         logMsg("data", "/privmsg", "User: " + sender + " Hostname: " + hostname + " Message: " + message);
-
-        String[] msg_array = message.split(" ");
-        String msg_command = msg_array[0];
-        String user;
-
-        switch (msg_command)
-        {
-            case "!joinchan":
-                cmdJoinChan("IllusionAI", sender, msg_array);
-                break;
-
-            case "!partchan":
-                cmdPartChan("IllusionAI", sender, msg_array);
-                break;
-        }
-    }
-
-    @Override
-    public void onMode(String channel, String sourceNick, String sourceLogin, String sourceHostname, String mode)
-    {
-        super.onMode(channel, sourceNick, sourceLogin, sourceHostname, mode);
-
-        if (getChanUserFromChan(channel, sourceNick) == null)
-        {
-            logErr("Error onMode! Cannot find requested user from m_chanusers! (" + sourceNick + ") in (" + channel + ")");
-            // m_chanusers.add(new ChanUser(sourceNick, channel));
-        }
-
-        if (mode.equals("+o"))
-        {
-            logMsg("Adding +o MODE for user " + sourceNick + " in channel " + channel);
-            getChanUserFromChan(channel, sourceNick).setPrefix("@");
-        }
-        else if (mode.equals("-o"))
-        {
-            logMsg("Adding -o MODE for user " + sourceNick + " in channel " + channel);
-            getChanUserFromChan(channel, sourceNick).setPrefix("");
-        }
-    }
-
-    @Override
-    public void onOp(String channel, String sourceNick, String sourceLogin, String sourceHostname, String recipient)
-    {
-        super.onOp(channel, sourceNick, sourceLogin, sourceHostname, recipient);
-    }
-
-    @Override
-    public void onDeop(String channel, String sourceNick, String sourceLogin, String sourceHostname, String recipient)
-    {
-        super.onDeop(channel, sourceNick, sourceLogin, sourceHostname, recipient);
     }
 
     public void cmdJoinChan(String channel, String sender, String[] msg_array)
     {
-        if (isMod(sender) == null)
+        if (getMod(sender) == null)
         {
             return;
         }
@@ -451,7 +469,7 @@ public class TwitchAI extends PircBot
 
     public void cmdPartChan(String channel, String sender, String[] msg_array)
     {
-        if (isMod(sender) == null)
+        if (getMod(sender) == null)
         {
             return;
         }
@@ -488,68 +506,92 @@ public class TwitchAI extends PircBot
         listChannels();
     }
 
-    public ArrayList<User> getAllUsers()
+    public void cmdAddChan(String channel, String sender, String[] msg_array)
     {
-        ArrayList<User> result = new ArrayList<User>();
-
-        for (String s : getChannels())
+        if (getMod(sender) == null)
         {
-            result.addAll(Arrays.asList(getUsers(s)));
+            return;
         }
 
-        return result;
-    }
-
-    public ArrayList<User> getChanUsers(String channel)
-    {
-        ArrayList<User> result = new ArrayList<User>();
-        result.addAll(Arrays.asList(getUsers(channel)));
-        return result;
-    }
-
-    public ArrayList<ChanUser> getAllOps()
-    {
-        ArrayList<ChanUser> ops = new ArrayList<ChanUser>();
-
-        for (ChanUser u : getAllChanUsers())
+        if (msg_array.length <= 1)
         {
-            if (u.getPrefix().equals("@"))
+            sendMessage(channel, "Wrong syntax! Usage: !addchan channel");
+            return;
+        }
+
+        if (!msg_array[1].startsWith("#"))
+        {
+            msg_array[1] = "#" + msg_array[1];
+        }
+
+        ArrayList<String> addchan_channels = FileUtils.readTextFile("data/channels.txt");
+        if (addchan_channels.size() <= 0 || !addchan_channels.contains(msg_array[1]))
+        {
+            logMsg("Registering a new channel: " + msg_array[1]);
+            FileUtils.writeToTextFile("data/", "channels.txt", msg_array[1]);
+            joinChannel(msg_array[1]);
+        }
+        else
+        {
+            logErr("Failed to register a new channel: " + msg_array[1]);
+            sendMessage(channel, "That channel is already registered!");
+        }
+        return;
+    }
+
+    public void cmdDelChan(String channel, String sender, String[] msg_array)
+    {
+        if (getMod(sender) == null)
+        {
+            return;
+        }
+
+        if (msg_array.length <= 1)
+        {
+            sendMessage(channel, "Wrong syntax! Usage: !delchan channel");
+            return;
+        }
+
+        if (!msg_array[1].startsWith("#"))
+        {
+            msg_array[1] = "#" + msg_array[1];
+        }
+
+        if (!Arrays.asList(getChannels()).contains(msg_array[1]))
+        {
+            logErr("Can't delete channel " + msg_array[1] + " from the global channels list because it isn't in the joined channels list!");
+            return;
+        }
+
+        logMsg(sender + " Requested a deletion of channel: " + msg_array[1]);
+        partChannel(msg_array[1]);
+        FileUtils.removeFromTextFile("data", "/channels.txt", msg_array[1]);
+        ArrayList<ChanUser> users_to_be_removed = new ArrayList<ChanUser>();
+        for (ChanUser u : m_chanusers)
+        {
+            if (u.getChannel().equals(msg_array[1]))
             {
-                ops.add(u);
+                logMsg("Removing " + u.getName() + " from m_chanusers (" + msg_array[1] + ") because of a channel delete request...");
+                users_to_be_removed.add(u);
             }
         }
-
-        return ops;
+        m_chanusers.removeAll(users_to_be_removed);
+        listChannels();
     }
 
-    public ArrayList<ChanUser> getChanOps(String channel)
-    {
-        ArrayList<ChanUser> ops = new ArrayList<ChanUser>();
-
-        for (ChanUser u : getChanChanUsers(channel))
-        {
-            if (u.getPrefix().equals("@"))
-            {
-                ops.add(u);
-            }
-        }
-
-        return ops;
-    }
-
-    public ArrayList<ChanUser> getAllChanUsers()
+    public ArrayList<ChanUser> getAllUsers()
     {
         ArrayList<ChanUser> result = new ArrayList<ChanUser>();
 
         for (String s : getChannels())
         {
-            result.addAll(getChanChanUsers(s));
+            result.addAll(getChanUsers(s));
         }
 
         return result;
     }
 
-    public ArrayList<ChanUser> getChanChanUsers(String channel)
+    public ArrayList<ChanUser> getChanUsers(String channel)
     {
         ArrayList<ChanUser> result = new ArrayList<ChanUser>();
 
@@ -564,41 +606,41 @@ public class TwitchAI extends PircBot
         return result;
     }
 
-    public User getUserFromAll(String nick)
+    public ArrayList<ChanUser> getAllOps()
     {
-        User result = null;
+        ArrayList<ChanUser> ops = new ArrayList<ChanUser>();
 
-        for (User u : getAllUsers())
+        for (ChanUser u : getAllUsers())
         {
-            if (u.getNick().equals(nick))
+            if (u.getPrefix().equals("@"))
             {
-                result = u;
+                ops.add(u);
             }
         }
 
-        return result;
+        return ops;
     }
 
-    public User getUserFromChan(String channel, String nick)
+    public ArrayList<ChanUser> getChanOps(String channel)
     {
-        User result = null;
+        ArrayList<ChanUser> ops = new ArrayList<ChanUser>();
 
-        for (User u : getChanUsers(channel))
+        for (ChanUser u : getChanUsers(channel))
         {
-            if (u.getNick().equals(nick))
+            if (u.getPrefix().equals("@"))
             {
-                result = u;
+                ops.add(u);
             }
         }
 
-        return result;
+        return ops;
     }
 
-    public ChanUser getChanUserFromChan(String channel, String nick)
+    public ChanUser getUserFromAll(String nick)
     {
         ChanUser result = null;
 
-        for (ChanUser u : getChanChanUsers(channel))
+        for (ChanUser u : getAllUsers())
         {
             if (u.getName().equals(nick))
             {
@@ -609,7 +651,27 @@ public class TwitchAI extends PircBot
         return result;
     }
 
-    public TwitchUser isMod(String nick)
+    public ChanUser getUserFromChan(String channel, String nick)
+    {
+        ChanUser result = null;
+
+        for (ChanUser u : getChanUsers(channel))
+        {
+            if (u.getName().equals(nick))
+            {
+                result = u;
+            }
+        }
+
+        return result;
+    }
+
+    public ArrayList<TwitchUser> getMods()
+    {
+        return m_moderators;
+    }
+
+    public TwitchUser getMod(String nick)
     {
         TwitchUser result = null;
 
@@ -622,11 +684,6 @@ public class TwitchAI extends PircBot
         }
 
         return result;
-    }
-
-    public ArrayList<TwitchUser> getMods()
-    {
-        return m_moderators;
     }
 
 }
