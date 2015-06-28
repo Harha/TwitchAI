@@ -4,7 +4,8 @@ import static to.us.harha.twitchai.util.Globals.*;
 import static to.us.harha.twitchai.util.LogUtils.logMsg;
 import static to.us.harha.twitchai.util.LogUtils.logErr;
 import static to.us.harha.twitchai.util.GenUtils.exit;
-import to.us.harha.twitchai.bot.ChanUser;
+import to.us.harha.twitchai.bot.TwitchChannel;
+import to.us.harha.twitchai.bot.TwitchUser;
 import to.us.harha.twitchai.bot.TwitchAI;
 import to.us.harha.twitchai.util.ConfUtils;
 import to.us.harha.twitchai.util.FileUtils;
@@ -42,16 +43,6 @@ public class Main
 
         twitchai.init_channels();
 
-        Runtime.getRuntime().addShutdownHook(new Thread(new Runnable()
-        {
-
-            public void run()
-            {
-                twitchai.destruct();
-                exit(0);
-            }
-        }, "Exit-hook"));
-
         float time;
         long timeStart, timeEnd;
 
@@ -60,7 +51,15 @@ public class Main
             timeStart = System.nanoTime();
             g_date.setTime(System.currentTimeMillis());
 
-            for (ChanUser u : twitchai.getAllUsers())
+            for (TwitchChannel c : twitchai.getTwitchChannels())
+            {
+                if (c.getCmdSent() > 0)
+                {
+                    c.setCmdSent(c.getCmdSent() - 1);
+                }
+            }
+
+            for (TwitchUser u : twitchai.getAllUsers())
             {
                 if (u.getCmdTimer() > 0)
                 {
@@ -73,6 +72,9 @@ public class Main
 
             twitchai.setCycleTime(time);
 
+            /*
+             * Main loop ticks only once per second.
+             */
             try
             {
                 if (time < 1000.0f)

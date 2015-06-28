@@ -39,9 +39,10 @@ public class ConfUtils
             o = new FileOutputStream("data/config.cfg");
 
             // Set each variable
-            p.setProperty("g_window_width", "512");
-            p.setProperty("g_window_height", "512");
             p.setProperty("g_debug", "false");
+            p.setProperty("g_bot_reqMembership", "true");
+            p.setProperty("g_bot_reqCommands", "true");
+            p.setProperty("g_bot_reqTags", "false");
             p.setProperty("g_bot_name", "TwitchAI");
             p.setProperty("g_bot_oauth", "youroauth");
             p.setProperty("g_bot_chan", "#IllusionAI");
@@ -72,9 +73,10 @@ public class ConfUtils
             p.load(i);
 
             // Get the properties and set the config variables
-            g_window_width = Integer.valueOf(p.getProperty("g_window_width"));
-            g_window_height = Integer.valueOf(p.getProperty("g_window_height"));
             g_debug = Boolean.valueOf(p.getProperty("g_debug"));
+            g_bot_reqMembership = Boolean.valueOf(p.getProperty("g_bot_reqMembership"));
+            g_bot_reqCommands = Boolean.valueOf(p.getProperty("g_bot_reqCommands"));
+            g_bot_reqTags = Boolean.valueOf(p.getProperty("g_bot_reqTags"));
             g_bot_name = String.valueOf(p.getProperty("g_bot_name"));
             g_bot_oauth = String.valueOf(p.getProperty("g_bot_oauth"));
             g_bot_chan = String.valueOf(p.getProperty("g_bot_chan"));
