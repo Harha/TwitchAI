@@ -18,13 +18,19 @@ import to.us.harha.twitchai.util.FileUtils;
 public class TwitchAI extends PircBot
 {
 
+    private float                 m_cycleTime;
     private boolean               m_hasMembership;
+    private boolean               m_hasCommands;
+    private boolean               m_hasTags;
     private ArrayList<TwitchUser> m_moderators;
     private ArrayList<ChanUser>   m_chanusers;
 
     public TwitchAI()
     {
+        m_cycleTime = 0.0f;
         m_hasMembership = false;
+        m_hasCommands = false;
+        m_hasTags = false;
         m_moderators = new ArrayList<TwitchUser>();
         m_chanusers = new ArrayList<ChanUser>();
 
@@ -64,8 +70,12 @@ public class TwitchAI extends PircBot
             exit(1);
         }
 
-        logMsg("Requesting twitch membership capability for JOIN/PART messages...");
+        logMsg("Requesting twitch membership capability for NAMES/JOIN/PART/MODE messages...");
         sendRawLine(g_server_memreq);
+        logMsg("Requesting twitch commands capability for NOTICE/HOSTTARGET/CLEARCHAT/USERSTATE messages... ");
+        sendRawLine(g_server_cmdreq);
+        logMsg("Requesting twitch tags capability for PRIVMSG/USERSTATE/GLOBALUSERSTATE messages... ");
+        sendRawLine(g_server_tagreq);
     }
 
     public void init_channels()
@@ -99,8 +109,16 @@ public class TwitchAI extends PircBot
         if (!m_hasMembership && line.equals(g_server_memans))
         {
             m_hasMembership = true;
-            init_channels();
-            return;
+        }
+
+        if (!m_hasCommands && line.equals(g_server_cmdans))
+        {
+            m_hasCommands = true;
+        }
+
+        if (!m_hasTags && line.equals(g_server_tagans))
+        {
+            m_hasTags = true;
         }
 
         String[] line_array = line.split(" ");
@@ -233,6 +251,10 @@ public class TwitchAI extends PircBot
 
                 case "!info":
                     sendMessage(channel, "Language: Java Core: " + g_bot_version + " Library: " + getVersion());
+                    break;
+
+                case "!performance":
+                    sendMessage(channel, "My current main-loop cycle time: " + m_cycleTime + "ms.");
                     break;
 
                 case "!date":
@@ -684,6 +706,21 @@ public class TwitchAI extends PircBot
         }
 
         return result;
+    }
+
+    public float getCycleTime()
+    {
+        return m_cycleTime;
+    }
+
+    public void setCycleTime(float cycleTime)
+    {
+        m_cycleTime = cycleTime;
+    }
+
+    public boolean isInitialized()
+    {
+        return m_hasMembership & m_hasCommands & m_hasTags;
     }
 
 }

@@ -42,9 +42,9 @@ public class ConfUtils
             p.setProperty("g_window_width", "512");
             p.setProperty("g_window_height", "512");
             p.setProperty("g_debug", "false");
-            p.setProperty("g_bot_name", "botname");
-            p.setProperty("g_bot_oauth", "botoauth");
-            p.setProperty("g_bot_chan", "#deprecated");
+            p.setProperty("g_bot_name", "TwitchAI");
+            p.setProperty("g_bot_oauth", "youroauth");
+            p.setProperty("g_bot_chan", "#IllusionAI");
 
             // Store the variables
             p.store(o, null);

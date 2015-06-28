@@ -1,6 +1,8 @@
 package to.us.harha.twitchai;
 
 import static to.us.harha.twitchai.util.Globals.*;
+import static to.us.harha.twitchai.util.LogUtils.logMsg;
+import static to.us.harha.twitchai.util.LogUtils.logErr;
 import static to.us.harha.twitchai.util.GenUtils.exit;
 import to.us.harha.twitchai.bot.ChanUser;
 import to.us.harha.twitchai.bot.TwitchAI;
@@ -18,6 +20,28 @@ public class Main
         TwitchAI twitchai = new TwitchAI();
         twitchai.init_twitch();
 
+        int init_time = 5;
+        while (!twitchai.isInitialized())
+        {
+            init_time--;
+            try
+            {
+                logMsg("Waiting for twitch member/cmd/tag responses... " + init_time);
+                Thread.sleep(1000);
+            } catch (InterruptedException e)
+            {
+                e.printStackTrace();
+            }
+        }
+
+        if (!twitchai.isInitialized())
+        {
+            logErr("Failed to receive twitch member/cmd/tag permissions!");
+            exit(1);
+        }
+
+        twitchai.init_channels();
+
         Runtime.getRuntime().addShutdownHook(new Thread(new Runnable()
         {
 
@@ -28,8 +52,12 @@ public class Main
             }
         }, "Exit-hook"));
 
+        float time;
+        long timeStart, timeEnd;
+
         while (twitchai.isConnected())
         {
+            timeStart = System.nanoTime();
             g_date.setTime(System.currentTimeMillis());
 
             for (ChanUser u : twitchai.getAllUsers())
@@ -40,9 +68,21 @@ public class Main
                 }
             }
 
+            timeEnd = System.nanoTime();
+            time = (float) (timeEnd - timeStart) / 1000000.0f;
+
+            twitchai.setCycleTime(time);
+
             try
             {
-                Thread.sleep(1000);
+                if (time < 1000.0f)
+                {
+                    Thread.sleep((long) (1000.0f - time));
+                }
+                else
+                {
+                    logErr("Warning! Main thread cycle time is longer than a second! Skipping sleep! Cycle-time: " + time);
+                }
             } catch (InterruptedException e)
             {
                 e.printStackTrace();

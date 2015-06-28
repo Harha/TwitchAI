@@ -26,7 +26,7 @@ public class Globals
     public static Date           g_date           = new Date();
 
     // Global variables
-    public static final String   g_commands_user  = "!help !info !date !time !users !ops !mods !channels !slots";
+    public static final String   g_commands_user  = "!help !info !performance !date !time !users !ops !mods !channels !slots";
     public static final String   g_commands_op    = "!permit !unpermit";
     public static final String   g_commands_mod   = "!addmod !delmod !joinchan !partchan !addchan !delchan";
     public static final String[] g_emotes_faces   = { "4Head", "BibleThump", "BloodTrail", "VaultBoy", "deIlluminati", "DOOMGuy", "FailFish", "Kappa", "Keepo" };
@@ -34,6 +34,11 @@ public class Globals
     // Server messages
     public static final String   g_server_memreq  = "CAP REQ :twitch.tv/membership";
     public static final String   g_server_memans  = ":tmi.twitch.tv CAP * ACK :twitch.tv/membership";
+    public static final String   g_server_cmdreq  = "CAP REQ :twitch.tv/commands";
+    public static final String   g_server_cmdans  = ":tmi.twitch.tv CAP * ACK :twitch.tv/commands";
+    public static final String   g_server_tagreq  = "CAP REQ :twitch.tv/tags";
+    public static final String   g_server_tagans  = ":tmi.twitch.tv CAP * ACK :twitch.tv/tags";
+
 
     // Java objects
     public static final ChanUser g_nulluser       = new ChanUser("null", "null");
