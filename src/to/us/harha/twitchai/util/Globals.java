@@ -17,7 +17,7 @@ public class Globals
     public static String           g_bot_name;
     public static String           g_bot_oauth;
     public static String           g_bot_chan;
-    public static String           g_bot_version    = "TwitchAI 0.0.2";
+    public static String           g_bot_version    = "TwitchAI 0.0.3";
     public static String           g_lib_version    = "PircBot 1.5.0";
 
     // Time & Date
@@ -27,9 +27,11 @@ public class Globals
     public static Date             g_date           = new Date();
 
     // Global variables
-    public static final String     g_commands_user  = "!help !info !performance !date !time !users !ops !mods !channels !slots";
+    public static final String     g_commands_user  = "!help !info !performance !date !time !users !ops !mods !channel !channels !slots";
     public static final String     g_commands_op    = "!permit";
-    public static final String     g_commands_mod   = "!addmod !delmod !joinchan !partchan !addchan !delchan";
+    public static final String     g_commands_mod   = "!joinchan !partchan !addchan !delchan";
+    public static final String     g_commands_admin = "!addmod !delmod ";
+    public static final String     g_commands_bot   = "!help !register !unregister";
     public static final String[]   g_emotes_faces   = { "4Head", "BibleThump", "BloodTrail", "VaultBoy", "deIlluminati", "DOOMGuy", "FailFish", "Kappa", "Keepo" };
 
     // Server messages

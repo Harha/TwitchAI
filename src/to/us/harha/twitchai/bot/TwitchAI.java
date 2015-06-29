@@ -41,10 +41,6 @@ public class TwitchAI extends PircBot
         setVerbose(false);
     }
 
-    public void destruct()
-    {
-    }
-
     public void init_twitch()
     {
         logMsg("Loading all registered TwitchAI moderators...");
@@ -129,6 +125,37 @@ public class TwitchAI extends PircBot
         m_channels.remove(getTwitchChannel(channel));
     }
 
+    public void addChannel(String channel, String sender, String addChan)
+    {
+        ArrayList<String> addchan_channels = FileUtils.readTextFile("data/channels.txt");
+        if (addchan_channels.size() <= 0 || !addchan_channels.contains(addChan))
+        {
+            logMsg("Registering a new channel: " + addChan);
+            sendTwitchMessage(channel, "Registering a new channel: " + addChan);
+            FileUtils.writeToTextFile("data/", "channels.txt", addChan);
+            joinToChannel(addChan);
+        }
+        else
+        {
+            logErr("Failed to register a new channel: " + addChan);
+            sendTwitchMessage(channel, "That channel is already registered!");
+        }
+        return;
+    }
+
+    public void delChannel(String channel, String sender, String delChan)
+    {
+        if (!Arrays.asList(getChannels()).contains(delChan))
+        {
+            logErr("Can't delete channel " + delChan + " from the global channels list because it isn't in the joined channels list!");
+            return;
+        }
+        logMsg(sender + " Requested a deletion of channel: " + delChan);
+        sendTwitchMessage(channel, sender + " Requested a deletion of channel: " + delChan);
+        partFromChannel(delChan);
+        FileUtils.removeFromTextFile("data", "/channels.txt", delChan);
+    }
+
     public void sendTwitchMessage(String channel, String message)
     {
         TwitchChannel twitch_channel = getTwitchChannel(channel);
@@ -143,7 +170,8 @@ public class TwitchAI extends PircBot
         {
             if (twitch_channel.getCmdSent() <= 48)
             {
-                sendTwitchMessage(channel, message);
+                twitch_channel.setCmdSent(twitch_channel.getCmdSent() + 1);
+                sendMessage(channel, message);
             }
             else
             {
@@ -154,7 +182,8 @@ public class TwitchAI extends PircBot
         {
             if (twitch_channel.getCmdSent() <= 16)
             {
-                sendTwitchMessage(channel, message);
+                twitch_channel.setCmdSent(twitch_channel.getCmdSent() + 1);
+                sendMessage(channel, message);
             }
             else
             {
@@ -166,11 +195,6 @@ public class TwitchAI extends PircBot
     @Override
     public void handleLine(String line)
     {
-        if (line.contains(":jtv "))
-        {
-            line = line.replace(":jtv ", "");
-        }
-
         logMsg("handleLine | " + line);
 
         super.handleLine(line);
@@ -193,11 +217,15 @@ public class TwitchAI extends PircBot
             }
         }
 
-        String[] line_array = line.split(" ");
-
-        if (line_array[0].equals("MODE") && line_array.length >= 4)
+        if (line.contains(":jtv "))
         {
-            onMode(line_array[1], line_array[3], line_array[3], "", line_array[2]);
+            line = line.replace(":jtv ", "");
+            String[] line_array = line.split(" ");
+
+            if (line_array[0].equals("MODE") && line_array.length >= 4)
+            {
+                onMode(line_array[1], line_array[3], line_array[3], "", line_array[2]);
+            }
         }
     }
 
@@ -300,20 +328,6 @@ public class TwitchAI extends PircBot
         logMsg("data/channels/" + channel, "/onMessage", "User: " + sender + " Hostname: " + hostname + " Message: " + message);
 
         TwitchChannel twitch_channel = getTwitchChannel(channel);
-        TwitchUser twitch_user = twitch_channel.getUser(sender);
-
-        // Move these checks to after ! check
-        if (twitch_channel == null) // This, I don't currently understand...
-        {
-            logErr("Error on ONMESSAGE, channel (" + channel + ") doesn't exist!");
-            return;
-        }
-
-        if (twitch_user == null)
-        {
-            logErr("Error on ONMESSAGE, user (" + sender + ") doesn't exist! Creating a temp null user object for user!");
-            twitch_user = g_nulluser;
-        }
 
         /*
          * Handle all chat commands
@@ -321,11 +335,23 @@ public class TwitchAI extends PircBot
         if (message.startsWith("!"))
         {
 
+            TwitchUser twitch_user = twitch_channel.getUser(sender);
+
+            if (twitch_user == null)
+            {
+                logErr("Error on ONMESSAGE, user (" + sender + ") doesn't exist! Creating a temp null user object for user!");
+                twitch_user = g_nulluser;
+            }
+
             if (message.length() > 3)
             {
                 if (twitch_user.getCmdTimer() > 0)
                 {
-                    sendTwitchMessage(channel, "Please wait " + twitch_user.getCmdTimer() + " seconds before sending a new command.");
+                    if (twitch_user.getCmdTimer() > 10 && twitch_channel.getCmdSent() < 32)
+                    {
+                        sendTwitchMessage(channel, twitch_user + " Please wait " + twitch_user.getCmdTimer() + " seconds before sending a new command.");
+                    }
+                    twitch_user.setCmdTimer(twitch_user.getCmdTimer() + 5);
                     return;
                 }
                 else
@@ -349,6 +375,28 @@ public class TwitchAI extends PircBot
 
             timeStart = System.nanoTime();
 
+            /*
+             * Commands available on the bot's own channel
+             */
+            if (channel.equals(g_bot_chan))
+            {
+                switch (msg_command)
+                {
+                    case "help":
+                        sendTwitchMessage(channel, "List of available commands on this channel: " + g_commands_bot);
+                        break;
+                    case "register":
+                        addChannel(channel, g_bot_name, "#" + user_sender);
+                        break;
+                    case "unregister":
+                        delChannel(channel, g_bot_name, "#" + user_sender);
+                        break;
+                }
+            }
+
+            /*
+             * Commands available on all channels
+             */
             switch (msg_command)
             {
 
@@ -356,17 +404,24 @@ public class TwitchAI extends PircBot
              * Normal channel user commands below
              */
                 case "help":
-                    sendTwitchMessage(channel, "List of available commands to you: " + g_commands_user);
+                    String help_text = "List of available commands to you: " + g_commands_user;
 
                     if (twitch_user.isOperator())
                     {
-                        sendTwitchMessage(channel, "List of available operator commands to you: " + g_commands_op);
+                        help_text += " " + g_commands_op;
                     }
 
                     if (twitch_user.isModerator())
                     {
-                        sendTwitchMessage(channel, "List of TwitchAI moderator commands available to you: " + g_commands_mod);
+                        help_text += " " + g_commands_mod;
                     }
+
+                    if (twitch_user.isAdmin())
+                    {
+                        help_text += " " + g_commands_admin;
+                    }
+
+                    sendTwitchMessage(channel, help_text);
                     break;
 
                 case "info":
@@ -419,7 +474,7 @@ public class TwitchAI extends PircBot
                 case "ops":
                     if (msg_array.length <= 1)
                     {
-                        sendTwitchMessage(channel, "Operators in this channel: " + twitch_channel.getOperators().size());
+                        sendTwitchMessage(channel, "Operators in this channel: " + twitch_channel.getOperators());
                         break;
                     }
 
@@ -444,19 +499,19 @@ public class TwitchAI extends PircBot
                         break;
                     }
 
-                    sendTwitchMessage(channel, "Operators in channel (" + ops_channel + "): " + ops_channel.getOperators().size());
+                    sendTwitchMessage(channel, "Operators in channel (" + ops_channel + "): " + ops_channel.getOperators());
                     break;
 
                 case "mods":
                     if (msg_array.length <= 1)
                     {
-                        sendTwitchMessage(channel, "TwitchAI Moderators in this channel: " + twitch_channel.getModerators().size());
+                        sendTwitchMessage(channel, "TwitchAI Moderators in this channel: " + twitch_channel.getModerators());
                         break;
                     }
 
                     if (msg_array[1].equals("all"))
                     {
-                        sendTwitchMessage(channel, "TwitchAI Moderators in all channels: " + getOfflineMods().size());
+                        sendTwitchMessage(channel, "TwitchAI Moderators: " + getOfflineModerators());
                         break;
                     }
 
@@ -475,7 +530,11 @@ public class TwitchAI extends PircBot
                         break;
                     }
 
-                    sendTwitchMessage(channel, "TwitchAI Moderators in channel (" + mods_channel + "): " + mods_channel.getModerators().size());
+                    sendTwitchMessage(channel, "TwitchAI Moderators in channel (" + mods_channel + "): " + mods_channel.getModerators());
+                    break;
+
+                case "channel":
+                    sendTwitchMessage(channel, "Current channel info: " + twitch_channel);
                     break;
 
                 case "channels":
@@ -501,13 +560,13 @@ public class TwitchAI extends PircBot
                 case "permit":
                     if (!twitch_user.isOperator())
                     {
-                        return;
+                        break;
                     }
 
                     if (msg_array.length <= 2)
                     {
                         sendTwitchMessage(channel, "Wrong syntax! Usage: !permit username true/false");
-                        return;
+                        break;
                     }
 
                     user_target = msg_array[1];
@@ -516,7 +575,7 @@ public class TwitchAI extends PircBot
                     if (permit_user == null)
                     {
                         logErr("Error on !permit user on channel (" + twitch_channel + ")! Target user (" + user_target + ") not found!");
-                        return;
+                        break;
                     }
 
                     if (msg_array[2].equals("true"))
@@ -534,8 +593,99 @@ public class TwitchAI extends PircBot
                 /*
                  * Normal TwitchAI moderator commands below
                  */
+                case "joinchan":
+                    if (!twitch_user.isModerator())
+                    {
+                        break;
+                    }
+
+                    if (msg_array.length <= 1)
+                    {
+                        sendTwitchMessage(channel, "Wrong syntax! Usage: !joinchan channel");
+                        break;
+                    }
+
+                    if (!msg_array[1].startsWith("#"))
+                    {
+                        msg_array[1] = "#" + msg_array[1];
+                    }
+
+                    logMsg(sender + " Requested a join to channel: " + msg_array[1]);
+                    joinToChannel(msg_array[1]);
+                    break;
+
+                case "partchan":
+                    if (!twitch_user.isModerator())
+                    {
+                        break;
+                    }
+
+                    if (msg_array.length <= 1)
+                    {
+                        sendTwitchMessage(channel, "Wrong syntax! Usage: !joinchan channel");
+                        break;
+                    }
+
+                    if (!msg_array[1].startsWith("#"))
+                    {
+                        msg_array[1] = "#" + msg_array[1];
+                    }
+
+                    if (!Arrays.asList(getChannels()).contains(msg_array[1]))
+                    {
+                        logErr("Can't part channel " + msg_array[1] + " because it isn't in the joined channels list!");
+                        break;
+                    }
+
+                    logMsg(sender + " Requested a quit from channel: " + msg_array[1]);
+                    partFromChannel(msg_array[1]);
+                    break;
+
+                case "addchan":
+                    if (!twitch_user.isModerator())
+                    {
+                        break;
+                    }
+
+                    if (msg_array.length <= 1)
+                    {
+                        sendTwitchMessage(channel, "Wrong syntax! Usage: !addchan channel");
+                        break;
+                    }
+
+                    if (!msg_array[1].startsWith("#"))
+                    {
+                        msg_array[1] = "#" + msg_array[1];
+                    }
+
+                    addChannel(channel, sender, msg_array[1]);
+                    break;
+
+                case "delchan":
+                    if (!twitch_user.isModerator())
+                    {
+                        break;
+                    }
+
+                    if (msg_array.length <= 1)
+                    {
+                        sendTwitchMessage(channel, "Wrong syntax! Usage: !delchan channel");
+                        break;
+                    }
+
+                    if (!msg_array[1].startsWith("#"))
+                    {
+                        msg_array[1] = "#" + msg_array[1];
+                    }
+
+                    delChannel(channel, sender, msg_array[1]);
+                    break;
+
+                /*
+                 * Normal TwitchAI admin commands below
+                 */
                 case "addmod":
-                    if (getOfflineModerator(user_sender) == null)
+                    if (!twitch_user.isAdmin())
                     {
                         break;
                     }
@@ -553,6 +703,7 @@ public class TwitchAI extends PircBot
                     {
                         TwitchUser moderator = new TwitchUser(user_target, "*");
                         m_moderators.add(moderator);
+                        twitch_channel.getUser(user_target).addPrefixChar("*");
                         FileUtils.writeToTextFile("data/", "moderators.txt", user_target + " *");
                         sendTwitchMessage(channel, sender + " Added a new moderator: " + moderator);
                         logMsg(sender + " Added a new moderator: " + moderator);
@@ -565,7 +716,7 @@ public class TwitchAI extends PircBot
                     break;
 
                 case "delmod":
-                    if (getOfflineModerator(user_sender) == null)
+                    if (!twitch_user.isAdmin())
                     {
                         break;
                     }
@@ -582,6 +733,7 @@ public class TwitchAI extends PircBot
                     if (delmod_user != null)
                     {
                         m_moderators.remove(delmod_user);
+                        twitch_channel.getUser(user_target).delPrefixChar("*");
                         FileUtils.removeFromTextFile("data/", "moderators.txt", user_target + " " + delmod_user.getPrefix());
                         sendTwitchMessage(channel, sender + " Removed a moderator: " + delmod_user);
                         logMsg(sender + " Removed a moderator: " + delmod_user);
@@ -593,28 +745,10 @@ public class TwitchAI extends PircBot
                     }
                     break;
 
-                case "joinchan":
-                    cmdJoinChan(channel, sender, msg_array);
-                    break;
-
-                case "partchan":
-                    cmdPartChan(channel, sender, msg_array);
-                    break;
-
-                case "addchan":
-                    cmdAddChan(channel, sender, msg_array);
-                    break;
-                case "delchan":
-                    cmdDelChan(channel, sender, msg_array);
-                    break;
-
-                /*
-                 * Normal TwitchAI admin commands below
-                 */
                 case "broadcast":
                     if (!twitch_user.isAdmin())
                     {
-                        return;
+                        break;
                     }
 
                     if (msg_array.length <= 1)
@@ -628,7 +762,7 @@ public class TwitchAI extends PircBot
                     for (TwitchChannel c : m_channels)
                     {
                         logMsg("Sending a broadcast message to channel (" + c + ") Message: " + broadcast_message);
-                        sendTwitchMessage(c.getName(), "Broadcast: " + broadcast_message);
+                        sendTwitchMessage(c.getName(), "System broadcast message: " + broadcast_message);
                     }
                     break;
             }
@@ -644,118 +778,6 @@ public class TwitchAI extends PircBot
     public void onPrivateMessage(String sender, String login, String hostname, String message)
     {
         logMsg("data", "/privmsg", "User: " + sender + " Hostname: " + hostname + " Message: " + message);
-    }
-
-    public void cmdJoinChan(String channel, String sender, String[] msg_array)
-    {
-        if (getOfflineModerator(sender) == null)
-        {
-            return;
-        }
-
-        if (msg_array.length <= 1)
-        {
-            sendTwitchMessage(channel, "Wrong syntax! Usage: !joinchan channel");
-            return;
-        }
-
-        if (!msg_array[1].startsWith("#"))
-        {
-            msg_array[1] = "#" + msg_array[1];
-        }
-
-        logMsg(sender + " Requested a join to channel: " + msg_array[1]);
-        joinToChannel(msg_array[1]);
-    }
-
-    public void cmdPartChan(String channel, String sender, String[] msg_array)
-    {
-        if (getOfflineModerator(sender) == null)
-        {
-            return;
-        }
-
-        if (msg_array.length <= 1)
-        {
-            sendTwitchMessage(channel, "Wrong syntax! Usage: !partchan channel");
-            return;
-        }
-
-        if (!msg_array[1].startsWith("#"))
-        {
-            msg_array[1] = "#" + msg_array[1];
-        }
-
-        if (!Arrays.asList(getChannels()).contains(msg_array[1]))
-        {
-            logErr("Can't part channel " + msg_array[1] + " because it isn't in the joined channels list!");
-            return;
-        }
-
-        logMsg(sender + " Requested a quit from channel: " + msg_array[1]);
-        partFromChannel(msg_array[1]);
-    }
-
-    public void cmdAddChan(String channel, String sender, String[] msg_array)
-    {
-        if (getOfflineModerator(sender) == null)
-        {
-            return;
-        }
-
-        if (msg_array.length <= 1)
-        {
-            sendTwitchMessage(channel, "Wrong syntax! Usage: !addchan channel");
-            return;
-        }
-
-        if (!msg_array[1].startsWith("#"))
-        {
-            msg_array[1] = "#" + msg_array[1];
-        }
-
-        ArrayList<String> addchan_channels = FileUtils.readTextFile("data/channels.txt");
-        if (addchan_channels.size() <= 0 || !addchan_channels.contains(msg_array[1]))
-        {
-            logMsg("Registering a new channel: " + msg_array[1]);
-            FileUtils.writeToTextFile("data/", "channels.txt", msg_array[1]);
-            joinToChannel(msg_array[1]);
-        }
-        else
-        {
-            logErr("Failed to register a new channel: " + msg_array[1]);
-            sendTwitchMessage(channel, "That channel is already registered!");
-        }
-        return;
-    }
-
-    public void cmdDelChan(String channel, String sender, String[] msg_array)
-    {
-        if (getOfflineModerator(sender) == null)
-        {
-            return;
-        }
-
-        if (msg_array.length <= 1)
-        {
-            sendTwitchMessage(channel, "Wrong syntax! Usage: !delchan channel");
-            return;
-        }
-
-        if (!msg_array[1].startsWith("#"))
-        {
-            msg_array[1] = "#" + msg_array[1];
-        }
-
-        if (!Arrays.asList(getChannels()).contains(msg_array[1]))
-        {
-            logErr("Can't delete channel " + msg_array[1] + " from the global channels list because it isn't in the joined channels list!");
-            return;
-        }
-
-        logMsg(sender + " Requested a deletion of channel: " + msg_array[1]);
-        partFromChannel(msg_array[1]);
-        FileUtils.removeFromTextFile("data", "/channels.txt", msg_array[1]);
     }
 
     public ArrayList<TwitchChannel> getTwitchChannels()
@@ -803,7 +825,7 @@ public class TwitchAI extends PircBot
         return result;
     }
 
-    public ArrayList<TwitchUser> getAllModerators()
+    public ArrayList<TwitchUser> getOnlineModerators()
     {
         ArrayList<TwitchUser> result = new ArrayList<TwitchUser>();
 
@@ -815,7 +837,7 @@ public class TwitchAI extends PircBot
         return result;
     }
 
-    public ArrayList<TwitchUser> getOfflineMods()
+    public ArrayList<TwitchUser> getOfflineModerators()
     {
         return m_moderators;
     }

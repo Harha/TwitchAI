@@ -19,7 +19,7 @@ public class TwitchChannel
     @Override
     public String toString()
     {
-        return "TwitchChannel[" + m_name + ", " + m_users.size() + "]";
+        return "TwitchChannel[" + m_name + ", " + m_users.size() + ", " + m_cmd_sent + "]";
     }
 
     public String getName()
